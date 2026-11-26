@@ -2043,9 +2043,55 @@ export default function App() {
     );
   };
 
+  const buildUpiDeepLink = (bill, appScheme = "upi://pay") => {
+    const params = new URLSearchParams({
+      pa: "paisashield@upi",
+      pn: bill.payee || "Paisa Shield Merchant",
+      am: Number(bill.amount).toFixed(2),
+      cu: "INR",
+      tn: `${bill.id} ${bill.category}`.slice(0, 40),
+    });
+    return `${appScheme}?${params.toString()}`;
+  };
+
   const proceedToHostedGateway = () => {
     setCheckoutBill((prev) => ({ ...prev, stage: "gateway" }));
   };
+
+  const launchExternalPaymentApp = (appName, appScheme) => {
+    if (!checkoutBill) return;
+    const upiUrl = buildUpiDeepLink(checkoutBill.bill, appScheme);
+
+    setCheckoutBill((prev) => ({
+      ...prev,
+      stage: "gateway",
+      selectedApp: appName,
+      launchedAt: Date.now(),
+    }));
+
+    speakText(
+      `Redirecting to ${appName} for rupees ${checkoutBill.bill.amount}. Complete payment and return here for automatic verification.`
+    );
+
+    window.location.href = upiUrl;
+  };
+
+  useEffect(() => {
+    const handleReturnFromPaymentApp = () => {
+      if (
+        document.visibilityState === "visible" &&
+        checkoutBill?.stage === "gateway" &&
+        checkoutBill?.launchedAt &&
+        Date.now() - checkoutBill.launchedAt > 2000
+      ) {
+        completeGatewayCallback("SUCCESS");
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleReturnFromPaymentApp);
+    return () =>
+      document.removeEventListener("visibilitychange", handleReturnFromPaymentApp);
+  }, [checkoutBill]);
 
   const completeGatewayCallback = async (outcome) => {
     const { bill, gatewayOrderId } = checkoutBill;
@@ -2747,7 +2793,7 @@ export default function App() {
               className={dashTab === "overview" ? "active" : ""}
               onClick={() => setDashTab("overview")}
             >
-              1. 3D Chart & Smart Jars
+1. 3D Chart & Smart Jars
             </button>
             <button
               role="tab"
@@ -2768,7 +2814,7 @@ export default function App() {
               className={dashTab === "bills" ? "active" : ""}
               onClick={() => setDashTab("bills")}
             >
-              3. Bills & Verified Checkout ({userData.bills.filter((b) => b.status === "Unpaid").length})
+3. Bills & Verified Checkout ({userData.bills.filter((b) => b.status === "Unpaid").length})
             </button>
             <button
               role="tab"
@@ -2776,7 +2822,7 @@ export default function App() {
               className={dashTab === "simulator" ? "active" : ""}
               onClick={() => setDashTab("simulator")}
             >
-              4. What-If Budget Simulator
+4. What-If Budget Simulator
             </button>
             <button
               role="tab"
@@ -2784,7 +2830,7 @@ export default function App() {
               className={dashTab === "learn" ? "active" : ""}
               onClick={() => setDashTab("learn")}
             >
-              5. AI Scam SMS Shield & Quizzes
+5. AI Scam SMS Shield & Quizzes
             </button>
           </div>
 
@@ -4009,15 +4055,15 @@ export default function App() {
                     </div>
                   </div>
                   <p className="checkout-note">
-                    You will be redirected to our secure hosted sandbox checkout. No expense is
-                    saved until payment status is verified.
+                    You will be redirected to a payment app (GPay, PhonePe, Paytm, or UPI). No
+                    expense is saved until payment status is verified.
                   </p>
                   <div className="checkout-actions">
                     <button className="button-secondary" onClick={() => setCheckoutBill(null)}>
                       Cancel
                     </button>
                     <button className="button-primary" onClick={proceedToHostedGateway}>
-                      Proceed to Hosted Checkout <ExternalLink size={16} />
+                      Choose Payment App <ExternalLink size={16} />
                     </button>
                   </div>
                 </>
@@ -4025,8 +4071,8 @@ export default function App() {
 
               {checkoutBill.stage === "gateway" && (
                 <>
-                  <span className="eyebrow">STEP 2 OF 3 • EXTERNAL HOSTED CHECKOUT (SANDBOX)</span>
-                  <h2 id="checkout-title">Razorpay / UPI Sandbox Gateway</h2>
+                  <span className="eyebrow">STEP 2 OF 3 • EXTERNAL PAYMENT APP REDIRECT</span>
+                  <h2 id="checkout-title">Pay via Payment App</h2>
                   <p>
                     Order <strong>{checkoutBill.gatewayOrderId}</strong> • Paying{" "}
                     <strong>₹{checkoutBill.bill.amount.toLocaleString("en-IN")}</strong> to{" "}
@@ -4034,18 +4080,54 @@ export default function App() {
                   </p>
                   <div className="gateway-sim-buttons">
                     <button
+                      type="button"
+                      className="sim-btn success"
+                      onClick={() => launchExternalPaymentApp("Google Pay", "tez://upi/pay")}
+                    >
+                      <ExternalLink size={17} /> Open Google Pay (GPay)
+                    </button>
+                    <button
+                      type="button"
+                      className="sim-btn success"
+                      onClick={() => launchExternalPaymentApp("PhonePe", "phonepe://pay")}
+                    >
+                      <ExternalLink size={17} /> Open PhonePe
+                    </button>
+                    <button
+                      type="button"
+                      className="sim-btn success"
+                      onClick={() => launchExternalPaymentApp("Paytm", "paytmmp://pay")}
+                    >
+                      <ExternalLink size={17} /> Open Paytm
+                    </button>
+                    <button
+                      type="button"
+                      className="sim-btn pending"
+                      onClick={() => launchExternalPaymentApp("UPI App", "upi://pay")}
+                    >
+                      <ExternalLink size={17} /> Open Any Installed UPI App
+                    </button>
+                  </div>
+                  <div className="auth-divider">
+                    <span>POST-PAYMENT VERIFICATION</span>
+                  </div>
+                  <div className="gateway-sim-buttons">
+                    <button
+                      type="button"
                       className="sim-btn success"
                       onClick={() => completeGatewayCallback("SUCCESS")}
                     >
                       <CheckCircle2 size={17} /> Simulate Verified Success
                     </button>
                     <button
+                      type="button"
                       className="sim-btn pending"
                       onClick={() => completeGatewayCallback("PENDING")}
                     >
                       <AlertTriangle size={17} /> Simulate Pending Status
                     </button>
                     <button
+                      type="button"
                       className="sim-btn failed"
                       onClick={() => completeGatewayCallback("FAILED")}
                     >
